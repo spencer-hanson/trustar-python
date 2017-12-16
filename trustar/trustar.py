@@ -443,6 +443,24 @@ class TruStar(object):
         resp = self.__get("reports/correlate", params=params, **kwargs)
         return resp.json()
 
+    def search_reports(self, search_term, enclave_ids=None, page_size=None, page_number=None, **kwargs):
+        """
+        Search for reports by a search term.
+        :param search_term: The term to search by.
+        :param enclave_ids: The ids of the enclaves to search in.
+        :param page_size: # of results on returned page
+        :param page_number: page to start returning results on
+        :return: A page of search results
+        """
+        params = {
+            'searchTerm': search_term,
+            'enclave_ids': enclave_ids,
+            'page_size': page_size,
+            'page_number': page_number
+        }
+        resp = self.__get("reports/search", params=params, **kwargs)
+        return Page.from_dict(resp.json())
+
 
     ###########################
     ### Indicator Endpoints ###
@@ -504,6 +522,24 @@ class TruStar(object):
         }
         resp = self.__get("indicators/external/related", params=params, **kwargs)
         return resp.json()
+
+    def search_indicators(self, search_term, enclave_ids=None, page_size=None, page_number=None, **kwargs):
+        """
+        Search for indicators by a search term.
+        :param search_term: The term to search by.
+        :param enclave_ids: The ids of the enclaves to search in.
+        :param page_size: # of results on returned page
+        :param page_number: page to start returning results on
+        :return: A page of search results
+        """
+        params = {
+            'searchTerm': search_term,
+            'enclave_ids': enclave_ids,
+            'page_size': page_size,
+            'page_number': page_number
+        }
+        resp = self.__get("indicators/search", params=params, **kwargs)
+        return Page.from_dict(resp.json())
 
 
     #####################
@@ -631,8 +667,50 @@ class TruStar(object):
 
     def get_related_indicators_generator(self, **kwargs):
         """
-        Creates a generator from the 'get_generator' method that returns each successive report.
+        Creates a generator from the 'get_related_indicators' method that returns each successive report.
         :param kwargs: Any extra keyword arguments.  These will be forwarded to the 'get_generator' method.
         :return: The generator.
         """
         return Page.get_generator(page_generator=self.get_related_indicators_page_generator(**kwargs))
+
+    def search_indicators_page_generator(self, start_page=0, page_size=None, **kwargs):
+        """
+        Creates a generator from the 'search_indicators' method that returns each successive page.
+        :param start_page: The page to start on.
+        :param page_size: The size of each page.
+        :param kwargs: Any extra keyword arguments.  These will be forwarded to the 'get_related_indicators' method.
+        :return: The generator.
+        """
+        def func(page_number, page_size):
+            return self.search_indicators(page_number=page_number, page_size=page_size, **kwargs)
+
+        return Page.get_page_generator(func, start_page, page_size)
+
+    def search_indicators_generator(self, **kwargs):
+        """
+        Creates a generator from the 'search_indicators' method that returns each successive indicator.
+        :param kwargs: Any extra keyword arguments.  These will be forwarded to the 'get_generator' method.
+        :return: The generator.
+        """
+        return Page.get_generator(page_generator=self.search_indicators_page_generator(**kwargs))
+
+    def search_reports_page_generator(self, start_page=0, page_size=None, **kwargs):
+        """
+        Creates a generator from the 'search_reports' method that returns each successive page.
+        :param start_page: The page to start on.
+        :param page_size: The size of each page.
+        :param kwargs: Any extra keyword arguments.  These will be forwarded to the 'get_related_indicators' method.
+        :return: The generator.
+        """
+        def func(page_number, page_size):
+            return self.search_reports(page_number=page_number, page_size=page_size, **kwargs)
+
+        return Page.get_page_generator(func, start_page, page_size)
+
+    def search_reports_generator(self, **kwargs):
+        """
+        Creates a generator from the 'search_reports' method that returns each successive report.
+        :param kwargs: Any extra keyword arguments.  These will be forwarded to the 'get_generator' method.
+        :return: The generator.
+        """
+        return Page.get_generator(page_generator=self.search_reports_page_generator(**kwargs))
