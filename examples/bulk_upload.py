@@ -14,16 +14,15 @@ from __future__ import print_function
 import argparse
 import os
 import time
-import logging
+import json
 import pdfminer.pdfinterp
 from pdfminer.pdfpage import PDFPage
 from pdfminer.converter import TextConverter
 from pdfminer.layout import LAParams
 from cStringIO import StringIO
-from trustar import TruStar
+from trustar import TruStar, Report, get_logger
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def extract_pdf(file_name):
@@ -40,10 +39,9 @@ def extract_pdf(file_name):
     interpreter = pdfminer.pdfinterp.PDFPageInterpreter(rsrcmgr, device)
 
     # Extract text from pdf file
-    fp = file(file_name, 'rb')
-    for page in PDFPage.get_pages(fp, maxpages=20):
-        interpreter.process_page(page)
-    fp.close()
+    with open(file_name, 'rb') as fp:
+        for page in PDFPage.get_pages(fp, maxpages=20):
+            interpreter.process_page(page)
 
     text = sio.getvalue()
 
@@ -87,7 +85,7 @@ def main():
     source_report_dir = args.dir
 
     ts_config = args.ts_config
-    ts = TruStar(config_file=ts_config, config_role="trustar")
+    ts = TruStar(config_file=ts_config)
 
     # process all files in directory
     logger.info("Processing and submitting each source file in %s as a TruSTAR Incident Report" % source_report_dir)
@@ -124,29 +122,26 @@ def main():
                     # response_json = ts.submit_report(token, report_body, "COMMUNITY: " + file)
                     logger.info("Report {}".format(report_body))
                     try:
-                        response_json = ts.submit_report(report_body, "ENCLAVE: " + source_file, enclave=True)
+                        report = Report(title="ENCLAVE: %s" % source_file,
+                                        body=report_body,
+                                        is_enclave=True,
+                                        enclave_ids=ts.enclave_ids)
+                        report = ts.submit_report(report)
+                        logger.info("SUCCESSFULLY SUBMITTED REPORT, " +
+                                    "TRUSTAR REPORT as Incident Report ID %s" % report.id)
+                        pf.write("%s\n" % source_file)
+
+                        if report.indicators is not None:
+                            print("Extracted the following indicators: {}"
+                                  .format(json.dumps([x.to_dict() for x in report.indicators], indent=2)))
+                        else:
+                            print("No indicators returned from  report id {0}".format(report.id))
                     except Exception as e:
                         if '413' in e.message:
                             logger.warn("Could not submit file {}. Contains more indicators than currently supported."
                                         .format(source_file))
                         else:
                             raise
-
-                    report_id = response_json['reportId']
-                    logger.info("SUCCESSFULLY SUBMITTED REPORT, TRUSTAR REPORT as Incident Report ID %s" % report_id)
-                    pf.write("%s\n" % source_file)
-
-                    # if 'reportIndicators' in response_json:
-                    #     print("Extracted the following indicators: {}".format(response_json['reportIndicators']))
-                    # else:
-                    #     print("No indicators returned from  report id {0}".format(report_id))
-                    #
-                    # # if 'correlatedIndicators' in response_json:
-                    #     print(
-                    #         "Extracted the following correlated indicators: {}".format(
-                    #             response_json['correlatedIndicators']))
-                    # else:
-                    #     print("No correlatedIndicators found in report id {0}".format(report_id))
 
                 except Exception as e:
                     logger.error("Problem with file %s, exception: %s " % (source_file, e))
