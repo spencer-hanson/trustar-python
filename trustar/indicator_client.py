@@ -256,12 +256,12 @@ class IndicatorClient(object):
             correlation_count, last_seen, sightings, notes, tags, enclave_ids.  All other attributes of the Indicator
             objects will have Null values.  
         """
-        MAX_CHARS_IN_URL = 5000
+        MAX_CHARS_IN_URL = 4500
         
         if not indicators:
             return []
         
-        # build lists of indicators where len(types) + len(values) < 5000 characters.
+        # build lists of indicators where len(types) + len(values) < MAX_CHARS_IN_URL characters.
         list_of_indicator_lists = []
         sublist = []
         s = ''
