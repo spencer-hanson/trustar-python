@@ -250,24 +250,54 @@ class IndicatorClient(object):
 
         :param indicators: a list of |Indicator| objects to query.  Values are required, types are optional.  Types
             might be required to distinguish in a case where one indicator value has been associated with multiple types
-            based on different contexts.
+            based on different contexts.  This list can be of unlimited size; this function will automatically divide it
+            into sublists that the endpoint can manage and submit each sublist individually, then aggregate the results. 
         :return: A list of |Indicator| objects.  The following attributes of the objects will be returned:  
             correlation_count, last_seen, sightings, notes, tags, enclave_ids.  All other attributes of the Indicator
             objects will have Null values.  
         """
+        MAX_CHARS_IN_URL = 5000
+        
+        if not indicators:
+            return []
+        
+        # build lists of indicators where len(types) + len(values) < 5000 characters.
+        list_of_indicator_lists = []
+        sublist = []
+        s = ''
+        for i in indicators:
+            sublist.append( i )
+            if i.value:
+                s += i.value
+            if s.type:
+                s += i.type
+            if len( s ) > MAX_CHARS_IN_URL:
+                list_of_indicator_lists.append( sublist )
+                sublist = []
+                s = ''
+                
+        # catch the last sub-list.        
+        list_of_indicator_lists.append( sublist )
 
-        params = {
-            'values': [i.value for i in indicators],
-            'types': [i.type for i in indicators]
-        }
+        # build list of metadata.
+        metadata_list = []    
+        for i_list in list_of_indicator_lists:
 
-        if len(params.get('types')) == 0:
-            params['types'] = None
+            # submit each sublist to the endpoint one at a time.  
+            params = {
+                'values': [i.value for i in i_list],
+                'types': [i.type for i in i_list]
+            }
+ 
+            if len(params.get('types')) == 0:
+                params['types'] = None
 
-        resp = self._client.get("indicators/metadata", params=params)
+            resp = self._client.get("indicators/metadata", params=params)
 
-        return [Indicator.from_dict(x) for x in resp.json()]
+            metadata_list.extend(  [Indicator.from_dict(x) for x in resp.json()] )
 
+        return metadata_list
+        
     def get_indicator_details(self, indicators, enclave_ids=None):
         """
         NOTE: This method uses an API endpoint that is intended for internal use only, and is not officially supported.
