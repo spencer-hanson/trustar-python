@@ -269,7 +269,7 @@ class IndicatorClient(object):
             sublist.append( i )
             if i.value:
                 s += i.value
-            if s.type:
+            if i.type:
                 s += i.type
             if len( s ) > MAX_CHARS_IN_URL:
                 list_of_indicator_lists.append( sublist )
