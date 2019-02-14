@@ -54,6 +54,71 @@ class IndicatorClient(object):
         }
         self._client.post("indicators", data=json.dumps(body))
 
+
+    def get_all_indicators_from_enclave_efficient(self, from_time=None, to_time=None, enclave_ids=None,
+                       included_tag_ids=None, excluded_tag_ids=None,
+                       start_page=0, page_size=None):
+
+        def get_current_utc_millis_int():
+            return int( round( time.time() * 1000 ) )
+
+        CURRENT_TIME = get_current_utc_millis_int()
+        INTERVAL_DAYS = 5
+        INTERVAL_MILLIS = 1000 * 60 * 60 * 24 * INTERVAL_DAYS
+        if not to_time:
+            to_time=CURRENT_TIME
+
+        indics_list_master = []        
+
+        if not enclave_indicators_profile:
+
+            interval_start_millis = from_time
+            
+            while True:
+
+                '''
+                # for dev purposes. 
+                if MAX_N_INDICS and len( indics_list_master ) > MAX_N_INDICS:
+                    print( 'BREAKING EARLY!!' )
+                    break
+                '''
+                
+                # calc interval end time.
+                interval_end_millis = interval_start_millis + INTERVAL_MILLIS
+
+                # ensure interval end time doesn't exceed the TO_MILLIS. 
+                if interval_end_millis > TO_MILLIS:
+                    interval_end_millis = TO_MILLIS
+
+                # create generator.      
+                indics_gen = ts.get_indicators(
+                    from_time=interval_start_millis,
+                    to_time=interval_end_millis,
+                    enclave_ids=DOWNLOAD_ENCLAVE_IDS_LIST,
+                    page_size=1000
+                )
+
+                # convert generator to list. 
+                indics_list_loop = []
+                for indic in indics_gen:
+                    if indic.type not in IOC_TYPES_TO_OMIT_LIST:
+                        indics_list_loop.append( indic )
+
+                # add this loop's indicators to the master list of indicators.
+                indics_list_master.extend( indics_list_loop )
+
+                # terminate loop if end time reached.  
+                if interval_end_millis == TO_MILLIS:
+                    break
+
+                print( '.', end='', flush=True )
+
+                # increment the start time
+                interval_start_millis = interval_end_millis + 1
+
+        return indics_list_master
+            
+        
     def get_indicators(self, from_time=None, to_time=None, enclave_ids=None,
                        included_tag_ids=None, excluded_tag_ids=None,
                        start_page=0, page_size=None):
