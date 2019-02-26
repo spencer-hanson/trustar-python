@@ -8,6 +8,7 @@ from six import string_types
 import functools
 import json
 import logging
+import time
 
 # package imports
 from .models import Indicator, Page, Tag
@@ -55,13 +56,70 @@ class IndicatorClient(object):
         self._client.post("indicators", data=json.dumps(body))
 
 
+    def dedup_list_of_indicators(self, indics_list):
+
+        # DEDUP THE LIST. 
+        list_of_indic_strings = [ json.dumps( indic.to_dict() ) for indic in indics_list ]
+        deduped_list_of_indic_strings = list( set( list_of_indic_strings ) )
+        
+        list_of_indic_dict_strings = [ json.dumps( indic.__dict__ for indic in indics_list) ]
+        deduped_list_of_indic_dict_strings = list( set( list_of_indic_dict_strings ) )
+                                       
+        
+
+        # ID DUPES, WRITE DUPES AND COUNTS TO A FILE. 
+        dict_of_dupe_indic_vals = {}
+        list_of_dupes_indics = []
+        list_of_non_dupes_indics = []
+        for s in list_of_indic_strings:
+            cnt = list_of_indic_strings.count( s )
+            indic = trustar.Indicator.from_dict( json.loads( s ) )
+            if cnt == 1:
+                list_of_non_dupes_indics.append( indic )
+            elif cnt > 1:            
+                dict_of_dupe_indic_vals.update( { indic.value : cnt } ) 
+                list_of_dupes_indics.append( indic )
+            else:
+                print( "!!!" )
+                print( 'indicator:  ', indic.val,  '   count:  ', cnt ) 
+
+
+        '''
+        for s in deduped_list_of_indic_strings:
+            count = list_of_indic_strings.count( s )
+            if count > 1:
+                list_of_dupe_indics.append( trustar.Indicator.from_dict( json.loads( s ) ) )
+        '''
+
+        '''
+        # write dupes to file. 
+        if dict_of_dupe_indic_vals:
+            with open( DUPEFP + '_' + str( x ) + '.txt' , 'w' ) as f:            
+                for ioc_val, ioc_cnt in dict_of_dupe_indic_vals.items():
+                    f.write( ioc_val + ' : ' + str( ioc_cnt ) + '\n\n' )
+        '''
+
+
+        if VERBOSE:
+            print( '# indics after dedup:  ', len( list_of_non_dupes_indics ) + len( list_of_dupes_indics ) )
+
+
+
+        return list_of_non_dupes_indics, list_of_dupes_indics
+
+        
+
+    def get_indicators_metadata_fault_tolerant(self, indics_list):
+        
+        
+
     def get_all_indicators_from_enclave_efficient(self, from_time=None, to_time=None, enclave_ids=None,
                        included_tag_ids=None, excluded_tag_ids=None,
                        start_page=0, page_size=None):
 
         def get_current_utc_millis_int():
             return int( round( time.time() * 1000 ) )
-
+        MAX_N_INDICS = 3000
         CURRENT_TIME = get_current_utc_millis_int()
         INTERVAL_DAYS = 5
         INTERVAL_MILLIS = 1000 * 60 * 60 * 24 * INTERVAL_DAYS
@@ -70,18 +128,24 @@ class IndicatorClient(object):
 
         indics_list_master = []        
 
-        if not enclave_indicators_profile:
+        FROM_MILLIS = from_time
+        TO_MILLIS = to_time
+
+        IOC_TYPES_TO_OMIT_LIST = []
+        DOWNLOAD_ENCLAVE_IDS_LIST = enclave_ids
+        
+        if True:
 
             interval_start_millis = from_time
             
             while True:
 
-                '''
+                
                 # for dev purposes. 
                 if MAX_N_INDICS and len( indics_list_master ) > MAX_N_INDICS:
                     print( 'BREAKING EARLY!!' )
                     break
-                '''
+                
                 
                 # calc interval end time.
                 interval_end_millis = interval_start_millis + INTERVAL_MILLIS
@@ -91,7 +155,7 @@ class IndicatorClient(object):
                     interval_end_millis = TO_MILLIS
 
                 # create generator.      
-                indics_gen = ts.get_indicators(
+                indics_gen = self.get_indicators(
                     from_time=interval_start_millis,
                     to_time=interval_end_millis,
                     enclave_ids=DOWNLOAD_ENCLAVE_IDS_LIST,
@@ -112,10 +176,81 @@ class IndicatorClient(object):
                     break
 
                 print( '.', end='', flush=True )
+                print( len( indics_list_loop ) )
 
                 # increment the start time
                 interval_start_millis = interval_end_millis + 1
 
+
+
+            # !!!!! NEED TO GET METADATA FOR ALL INDICATORS !!!!    
+
+                
+            # CHECK TO ENSURE ALL INDICATOR OBJECTS HAVE VALID LAST_SEEN ATTRIBUTE VALUE.
+            indics_with_last_seen_None = []
+            indics_with_last_seen_empty_str = []
+            indics_with_last_seen_int = []
+            for indic in indics_list_master:
+                if indic.last_seen == None:
+                    indics_with_last_seen_None.append( indic )
+                if indic.last_seen == '':
+                    indics_with_last_seen_empty_str.append( indic )
+                if isinstance( indic.last_seen, int ):
+                    if indic.last_seen > FROM_MILLIS:
+                        indics_with_last_seen_int.append( indic )
+            print( 'a:  ', len( indics_with_last_seen_None ) )
+            print( 'b:  ', len( indics_with_last_seen_empty_str ) )
+            print( 'c:  ', len( indics_with_last_seen_int ) )
+            exit()
+
+                    
+            # DICT OF INDICS GROUPED BY 'UPDATED'.    
+            dict_indics_groupby_last_seen = {}
+            for indic in indics_list_master:
+                if indic.last_seen in dict_indics_groupby_last_seen:
+                    dict_indics_groupby_last_seen[ indic.last_seen ].append( indic )
+                else:
+                    dict_indics_groupby_last_seen[ indic.last_seen ] = [ indic ]
+
+            # REBUILD LIST OF INDICS, SORTED BY 'UPDATED'.        
+            indics_list_master_rebuilt = []
+            for time_last_seen in sorted( dict_indics_groupby_last_seen.keys() ):
+                indics_list_master_rebuilt.extend( dict_indics_groupby_last_seen[ time_last_seen ] )
+            print( len( indics_list_master_rebuilt ) )
+            print( len( indics_list_master ) )
+
+
+            # POP THE FIRST 1000, FIND THE 2ND-TO-LAST TIMEUPDATED, GRAB 1000 FROM THAT TIMEUPDATED, REPEAT....
+            indics_list = indics_list_master_rebuilt
+            updated_time_partitions_list = [ indics_list[0].last_seen ]
+            while indics_list:
+
+                updated_time_current = 0
+                updated_time_previous = 0
+                updated_index_last_previous_time = 0
+                
+                slice_at = 0
+                l = len( indics_list )
+                if l > 999:
+                    slice_size = 999
+                    slice = indics_list[ :slice_size ]
+                else:
+                    slice_size = l 
+                    slice = indics_list
+                
+                for i, indic in enumerate( slice ):
+                    if indic.last_seen > updated_time_current:
+                        updated_time_previous = updated_time_current
+                        updated_time_current = indic.last_seen
+                        updated_index_last_previous_time = i - 1
+                          
+                updated_time_partitions_list.append( updated_time_previous )        
+                
+                indics_list = indics_list[ slice_size: ]
+
+        print( 'done.' )
+        exit()        
+                
         return indics_list_master
             
         
