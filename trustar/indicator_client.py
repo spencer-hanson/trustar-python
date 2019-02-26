@@ -270,14 +270,17 @@ class IndicatorClient(object):
         The "get_indicators_metadata(..)" method accepts a list of Indicator objects and then queries Station for the
         metadata for all of those Indicators.  If for whatever reason Station crashes while retrieving the metadata
         for one of the indicators, the endpoint used by the "get_indicators_metadata(..)" method will return an error,
-        and the method will throw an exception.  This method handles that issue by repeatedly dividing the list by 2
-        and submits the smaller lists to the "get_indicators_metadata(..)" method again until it has retrieved
-        metadata for all indicators possible and isolated the indicators causing failure into a separate list.
+        and the method will throw an exception.  The "get_indicators_metadata_robust(..)" method handles that issue
+        by repeatedly dividing the list by 2 and submits the smaller lists to the "get_indicators_metadata(..)" method
+        again until metadata has been retrieved for all indicators possible and the indicators causing failure have
+        been isolated into a separate list.
 
         :param indicators: a list of |Indicator| objects for which the user wants to obtain metadata.  Only the Indicator's
-        "value" and "type" attributes are used by this method and the endpoint it queries.  All other attributes are
-        discarded.  The return will contain values for attributes returned by the metadata endpoint.
-        NOTE:  If one indicator's 'type' attribute contains a valid value, they all must.  
+        "value" and "type" attributes are used by this method and the endpoint it queries.  All values for all other
+        attributes of each |Indicator| instance will be discarded.  The return will contain values for attributes
+        returned by the metadata endpoint.
+        NOTE:  If one indicator's 'type' attribute contains a valid value, they all must.  This method does not check
+        for that; the API call will fail if that rule is violated.
 
         :return: A tuple of lists of |Indicator| objects.  The first list in the tuple is the list of indicator objects
         for which the method was able to obtain metadata, and the second list is the list of indicator objects for
@@ -294,77 +297,79 @@ class IndicatorClient(object):
             'notes': list (str) of notes made on the indicator. 
         """
 
-        deduped_list_of_indicators = [ Indicator.from_dict( 
-
-        
-        
         MAX_N_INDICS_PER_LIST_SUBMITTED_FOR_METADATA = 1000            
-        # GET MD FOR BIG LIST.
-        # init vars. 
+
+
+        # DEDUPLICATE THE LIST OF INDICATORS. 
+        # discard all attribute values other than value and type so we can dedupe on this later without other attrs messing up the dedup
+        indicators = [ Indicator.from_dict( { Indicator.VALUE_API_PARAM : i.value, Indicator.TYPE_API_PARAM : i.type } ) ]
+
+        # isolate singles & multiples.
+        values = [i.value for i in idicators]
+        singles = [i for i in indicators if values.count(i.value) == 1]
+        multiples = [i for i in indicators if values.count(i.value) > 1]
+        
+        # dedup the multiples, but keep multiple entries for a single indicator value in the list if the entries have different values for their "type" attributes.
+        multiples_deduped = [Indicator.from_dict(json.loads(i)) for i in list(set([str(i) for i in indicators]))]
+        deduped_list_of_indics = list().extend(singles).extend(multiples)
+        print(len(deduped_list_of_indics))
+        print(len(singles)+len(multiples_deduped))
+        
+        # GROUP BY PRESENCE OF TYPES.
+        indics_with_types = [i for i in deduped_list_of_indics if i.type]
+        indics_no_types = [i for i in deduped_list_of_indics if not i.type]
+        
+
+        # BUILD LIST OF METADATA AND FAILURES.
         md_list = []
         n_indics_per_list = MAX_N_INDICS_PER_LIST_SUBMITTED_FOR_METADATA
+        master_failures_list = []
+        for l in [indics_with_types, indics_with_no_types]:
 
-        # append (extend) the duplicates to the end of the list because they will likely cause the metadata method call to fail.            
-        big_list_of_indicators = list_of_non_dupe_indics
-        big_list_of_indicators.extend( list_of_dupe_indics )
-        fails_list = []
-
-        print( 'Acquiring metadata.', end='', flush=True )
-
-        while True:
-
-            print( '.', end='', flush=True )
-            if VERBOSE:
-                print( '\nn_indics_per_list:  ', n_indics_per_list )
-
-            # a list to keep track of lists that fail when submitted to the metadata method. 
+            big_list_of_indicators = l
             fails_list = []
 
-            # break big list into list of small lists.   
-            list_of_indicator_lists = []
-            sublist = []
-            for i in big_list_of_indicators :
-                sublist.append( i )
-                if isinstance( sublist, list) and len( sublist ) >= n_indics_per_list:
-                    list_of_indicator_lists.append( sublist )
-                    sublist = []                
+            # loop until fails list and list of indicator lists are equal or the length of the fails list is zero. 
+            while not ((len(fails_list) == len(list_of_indicator_lists)  and n_indics_per_list == 1) or len(fails_list) == 0):
 
-            # catch the last sub-list.
-            if isinstance( sublist, list ) and len( sublist ) > 0:
-                list_of_indicator_lists.append( sublist )
+                # a list to keep track of lists that fail when submitted to the metadata method. 
+                fails_list = []
 
-            # filter out any empty sub-lists.
-            list_of_indicator_lists = [ x for x in list_of_indicator_lists if x != [] ]
-            list_of_indicator_lists = [ x for x in list_of_indicator_lists if x ]
+                # break big list into list of small lists.   
+                list_of_indicator_lists = []
+                sublist = []
+                for i in big_list_of_indicators :
+                    sublist.append(i)
+                    if len(sublist) >= n_indics_per_list:
+                        list_of_indicator_lists.append(sublist)
+                        sublist = []                
+                list_of_indicator_lists.append(sublist)  # catch the last sub-list.
 
+                # filter out empty or Nonetype sub-lists.
+                list_of_indicator_lists = [x for x in list_of_indicator_lists if x != []]
+                list_of_indicator_lists = [x for x in list_of_indicator_lists if x]
 
-            # submit each sub-list to metadata endpoint
-            if VERBOSE:
-                print( 'Acquiring metadata.  ', len( list_of_indicator_lists ), ' calls required.  Runtime:  at least ', len( list_of_indicator_lists ) // 20, ' minutes.' ) 
-            for indic_list in list_of_indicator_lists:
-                print( '.', end='', flush=True )
-                try:
-                    md_list.extend( ts.get_indicators_metadata( indic_list ) )
-                    if VERBOSE:
-                        print( 's ', end='', flush=True ) 
-                except:
-                    fails_list.extend( indic_list )
-                    if VERBOSE:
-                        print( 'F ', end='', flush=True )
+                # submit each sub-list to metadata method.
+                for indic_list in list_of_indicator_lists:
+                    try:
+                        md_list.extend(ts.get_indicators_metadata(indic_list))
+                    except:
+                        fails_list.extend(indic_list)
 
-            # decrement n, adjust. 
-            if n_indics_per_list >= 2:
-                n_indics_per_list = int( n_indics_per_list / 2 )
-            big_list_of_indicators = fails_list
+                # divide n by 2.
+                if n_indics_per_list >= 2:
+                    n_indics_per_list = int(n_indics_per_list/2)
 
+                # recycle failures.     
+                big_list_of_indicators = fails_list
 
-            if VERBOSE:
-                print( "len fails_list:  ", len( fails_list ), "  len list_of_indicator_lists:  ", len( list_of_indicator_lists ), " len big_list_of_indicators:  ", len( big_list_of_indicators ) )
-
-            # end loop if all fail and n_indics_per_list == 1
-            if ( len( fails_list ) == len( list_of_indicator_lists )  and n_indics_per_list == 1 ) or len( fails_list ) == 0:
-                break
-
+                '''
+                # end loop if all indicators fail and n_indics_per_list == 1
+                if ( len( fails_list ) == len( list_of_indicator_lists )  and n_indics_per_list == 1 ) or len( fails_list ) == 0:
+                    break
+                '''
+            master_failures_list.extend(fails_list)    
+    return md_list, fails_list
 
 
     
