@@ -34,6 +34,22 @@ class Indicator(ModelBase):
 
     TYPES = IndicatorType.values()
 
+
+    VALUE_API_PARAM = 'value'
+    TYPE_API_PARAM = 'indicatorType'
+    PRIORIT_LEVEL_API_PARAM = 'priorityLevel'
+    CORRELATION_COUNT_API_PARAM = 'correlationCount'
+    WHITELISTED_API_PARAM = 'whitelisted'
+    WEIGHT_API_PARAM = 'weight'
+    REASON_API_PARAM = 'reason'
+    FIRST_SEEN_API_PARAM = 'firstSeen'
+    LAST_SEEN_API_PARAM = 'lastSeen'
+    SOURCE_API_PARAM = 'source'
+    NOTES_API_PARAM = 'notes'
+    TAGS_API_PARAM = 'tags'
+    ENCLAVE_IDS_API_PARAM = 'enclaveIds'
+
+    
     def __init__(self,
                  value,
                  type=None,
@@ -80,20 +96,21 @@ class Indicator(ModelBase):
         if tags is not None:
             tags = [Tag.from_dict(tag) for tag in tags]
 
-        return Indicator(value=indicator.get('value'),
-                         type=indicator.get('indicatorType'),
-                         priority_level=indicator.get('priorityLevel'),
-                         correlation_count=indicator.get('correlationCount'),
-                         whitelisted=indicator.get('whitelisted'),
-                         weight=indicator.get('weight'),
-                         reason=indicator.get('reason'),
-                         first_seen=indicator.get('firstSeen'),
-                         last_seen=indicator.get('lastSeen'),
-                         source=indicator.get('source'),
-                         notes=indicator.get('notes'),
+        return Indicator(value=indicator.get(VALUE_API_PARAM),
+                         type=indicator.get(TYPE_API_PARAM),
+                         priority_level=indicator.get(PRIORITY_LEVEL_API_PARAM),
+                         correlation_count=indicator.get(CORRELATION_COUNT_API_PARAM),
+                         whitelisted=indicator.get(WHITELISTED_API_PARAM),
+                         weight=indicator.get(WEIGHT_API_PARAM),
+                         reason=indicator.get(REASON_API_PARAM),
+                         first_seen=indicator.get(FIRST_SEEN_API_PARAM),
+                         last_seen=indicator.get(LAST_SEEN_API_PARAM),
+                         source=indicator.get(SOURCE_API_PARAM),
+                         notes=indicator.get(NOTES_API_PARAM),
                          tags=tags,
-                         enclave_ids=indicator.get('enclaveIds'))
+                         enclave_ids=indicator.get(ENCLAVE_IDS_API_PARAM))
 
+    
     def to_dict(self, remove_nones=False):
         """
         Creates a dictionary representation of the indicator.
@@ -110,17 +127,17 @@ class Indicator(ModelBase):
             tags = [tag.to_dict(remove_nones=remove_nones) for tag in self.tags]
 
         return {
-            'value': self.value,
-            'indicatorType': self.type,
-            'priorityLevel': self.priority_level,
-            'correlationCount': self.correlation_count,
-            'whitelisted': self.whitelisted,
-            'weight': self.weight,
-            'reason': self.reason,
-            'firstSeen': self.first_seen,
-            'lastSeen': self.last_seen,
-            'source': self.source,
-            'notes': self.notes,
-            'tags': tags,
-            'enclaveIds': self.enclave_ids
+            VALUE_API_PARAM: self.value,
+            TYPE_API_PARAM: self.type,
+            PRIORITY_LEVEL_API_PARAM: self.priority_level,
+            CORRELATION_COUNT_API_PARAM: self.correlation_count,
+            WHITELISTED_API_PARAM: self.whitelisted,
+            WEIGHT_API_PARAM: self.weight,
+            REASON_API_PARAM: self.reason,
+            FIRST_SEEN_API_PARAM: self.first_seen,
+            LAST_SEEN_API_PARAM: self.last_seen,
+            SOURCE_API_PARAM: self.source,
+            NOTES_API_PARAM: self.notes,
+            TAGS_API_PARAM: tags,
+            ENCLAVE_IDS_API_PARAM: self.enclave_ids
         }
