@@ -92,7 +92,7 @@ class Indicator(ModelBase):
         :return: The indicator object.
         """
 
-        tags = indicator.get('tags')
+        tags = indicator.get(TAGS_API_PARAM)
         if tags is not None:
             tags = [Tag.from_dict(tag) for tag in tags]
 
