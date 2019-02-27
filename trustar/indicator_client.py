@@ -368,8 +368,41 @@ class IndicatorClient(object):
                 if ( len( fails_list ) == len( list_of_indicator_lists )  and n_indics_per_list == 1 ) or len( fails_list ) == 0:
                     break
                 '''
-            master_failures_list.extend(fails_list)    
-    return md_list, fails_list
+            master_failures_list.extend(fails_list)
+
+        # FIND INDICS SUBMITTED BUT NOT RETURNED BY METADATA ENDPOINT.
+        # if the IOC was in the submitted list and is present at least once in the return, we're good. 
+        # if the IOC was in the submitted list multiple times with different types, should it be required to be returned once for each type?
+        # test this by first uploading some IOCs to an enclave multiple times     
+        all_indics_submitted = [].extend(indics_with_types).extend(indics_with_no_types)
+        all_indics_submitted = [json.dumps(i.to_dict(remove_nones=True), sort_keys=True) for i in all_indics_submitted]
+
+        # join the list of metadata and master fails list. 
+        all_indics_acctd_for_so_far = [].extend(md_list).extend(master_fails_list)
+        
+        # get rid of the rest of the metadata so we can compare these to their counterparts in "all_indics_submitted". 
+        all_indics_acctd_for_so_far = [{Indicator.VALUE_API_PARAM:i.value, Indicator.TYPE_API_PARAM:i.type} for i in all_indics_acctd_for_so_far]
+
+        # convert dicts back to Indicators so we can dump them back to strings and compare them to counterparts in "all_indics_submitted". 
+        all_indics_acctd_for_so_far = [Indicator.from_dict(i) for i in all_indics_acctd_for_so_far]
+
+        # dump the Indicators back to strings. 
+        all_indics_acctd_for_so_far = [json.dumps(i.to_dict(remove_none=True), sort_keys=True) for i in all_indics_acctd_for_so_far]
+
+        # capture the strings from the originals submitted that are not also accounted for in md_list and failures so far. 
+        delta_strings = [i for i in all_indics_submitted if i not in all_indics_acctd_for_so_far]
+
+        # convert the deltas from strings to Indicators again. 
+        delta_indics = [Indicator.from_dict(json.loads(i)) for i in delta_strings]
+
+        # DOUBLE-CHECK THAT ALL ARE ACCOUNTED FOR.
+        # create list of strings containing type & value keys. 
+        all_submitted_strs = [json.dumps(i.to_dict(remove_nones=True), sort_keys=True) for i in [].extend(indics_with_types).extend(indics_with_no_types)]
+        print(set(all_submitted_strs) == (all_indics_acctd_for_so_far.extend(delta_strings))
+                         
+                        
+                        
+    return md_list, master_fails_list, delta_indics
 
 
     
